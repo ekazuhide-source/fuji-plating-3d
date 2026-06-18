@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>フジ化学 電気亜鉛めっき 生成プロセス 3D（化学のしくみ・暫定版）</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;font-family:"Meiryo","Hiragino Sans",sans-serif;background:#0e1726;}
+  #app{position:relative;width:100%;height:100%;}
+  canvas{display:block;}
+  #topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;
+    padding:8px 12px;background:rgba(14,23,38,.92);border-bottom:1px solid #25344a;z-index:10;}
+  #topbar h1{font-size:15px;margin:0;color:#dce8f5;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .badge{font-size:11px;background:#3a2f0a;color:#e6c860;border:1px solid #6b5a1e;border-radius:4px;padding:2px 6px;white-space:nowrap;}
+  .ctlbtn{font-size:13px;padding:8px 14px;border-radius:8px;border:1px solid #3a4d68;background:#152339;color:#dce8f5;cursor:pointer;white-space:nowrap;}
+  .ctlbtn:active{background:#1f3350;}
+  #bottombar{position:absolute;left:0;right:0;bottom:0;z-index:10;background:rgba(14,23,38,.94);
+    border-top:1px solid #25344a;padding:6px 8px 10px;}
+  #info{font-size:13px;color:#cdddf0;line-height:1.55;padding:4px 6px 8px;max-height:110px;overflow-y:auto;}
+  #info b{color:#7fd0ff;}
+  #scenebtns{display:flex;gap:6px;overflow-x:auto;padding:2px;-webkit-overflow-scrolling:touch;}
+  .sbtn{flex:0 0 auto;font-size:13px;padding:10px 12px;border-radius:10px;border:1px solid #3a4d68;
+    background:#152339;color:#cdddf0;cursor:pointer;min-width:82px;text-align:center;}
+  .sbtn.active{background:#1f6feb;color:#fff;border-color:#1f6feb;font-weight:bold;}
+  #err{position:absolute;top:40%;left:0;right:0;text-align:center;color:#f88;font-size:15px;display:none;z-index:20;}
+  @media (max-width: 900px){
+    #topbar h1{font-size:12px;}
+    .badge{font-size:9px;padding:1px 4px;}
+    .ctlbtn{font-size:12px;padding:7px 10px;}
+    #info{font-size:12px;max-height:96px;line-height:1.5;}
+    .sbtn{font-size:12px;min-width:70px;padding:9px 8px;}
+  }
+  @media (max-height: 600px){ #info{max-height:60px;} }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <h1>フジ化学 電気亜鉛めっき 生成プロセス（化学のしくみ）</h1>
+    <span class="badge">暫定版・模式図（数値は一例）</span>
+    <button class="ctlbtn" id="playbtn">⏸ 一時停止</button>
+    <button class="ctlbtn" id="spdbtn">速度 1x</button>
+  </div>
+  <div id="err">WebGL を初期化できませんでした。ブラウザ／ネット接続をご確認ください。</div>
+  <div id="bottombar">
+    <div id="info"></div>
+    <div id="scenebtns"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+catch (e) { document.getElementById('err').style.display = 'block'; throw e; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.getElementById('app').prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1726);
+scene.fog = new THREE.Fog(0x0e1726, 100, 240);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 600);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 4; controls.maxDistance = 180;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.82));
+const k = new THREE.DirectionalLight(0xffffff, 1.05); k.position.set(20, 40, 30); scene.add(k);
+const rimL = new THREE.DirectionalLight(0x6fa8ff, 0.5); rimL.position.set(-30, 10, -20); scene.add(rimL);
+
+/* ---------- ラベル ---------- */
+function makeLabel(text, scale = 0.5, fg = '#0e1726', bg = 'rgba(235,243,250,0.95)') {
+  const pad = 16, fs = 42;
+  const cv = document.createElement('canvas');
+  const m = cv.getContext('2d'); m.font = `bold ${fs}px Meiryo, sans-serif`;
+  cv.width = Math.ceil(m.measureText(text).width) + pad * 2; cv.height = fs + pad * 2;
+  const c = cv.getContext('2d');
+  c.fillStyle = bg; c.strokeStyle = '#6f8aa6'; c.lineWidth = 3;
+  c.beginPath(); c.roundRect(2, 2, cv.width - 4, cv.height - 4, 14); c.fill(); c.stroke();
+  c.font = `bold ${fs}px Meiryo, sans-serif`; c.fillStyle = fg; c.textBaseline = 'middle';
+  c.fillText(text, pad, cv.height / 2 + 2);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false }));
+  sp.scale.set(cv.width / 60 * scale, cv.height / 60 * scale, 1);
+  return sp;
+}
+function lblAt(text, scale, x, y, z, fg, bg) { const s = makeLabel(text, scale, fg, bg); s.position.set(x, y, z); return s; }
+
+const GROUPS = {};
+function group(name) { const g = new THREE.Group(); GROUPS[name] = g; scene.add(g); return g; }
+
+/* ====================================================================
+   CELL：めっき槽の断面（陽極=亜鉛板＋ / 陰極=製品− / 電解液 / 整流器）
+   ==================================================================== */
+const cell = group('cell');
+const TANKW = 22, TANKH = 13, TANKD = 9;
+const glass = new THREE.Mesh(new THREE.BoxGeometry(TANKW, TANKH, TANKD),
+  new THREE.MeshPhongMaterial({ color: 0x9fd3e6, transparent: true, opacity: 0.10, side: THREE.DoubleSide }));
+glass.position.y = TANKH / 2; cell.add(glass);
+const tankEdge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(TANKW, TANKH, TANKD)),
+  new THREE.LineBasicMaterial({ color: 0x4a6a86 }));
+tankEdge.position.y = TANKH / 2; cell.add(tankEdge);
+const elyte = new THREE.Mesh(new THREE.BoxGeometry(TANKW - 0.6, TANKH - 2.2, TANKD - 0.6),
+  new THREE.MeshPhongMaterial({ color: 0x2f7fd0, transparent: true, opacity: 0.26 }));
+elyte.position.y = (TANKH - 2.2) / 2 + 0.3; cell.add(elyte);
+cell.add(lblAt('電解液（アルカリ亜鉛浴）', 0.5, 0, TANKH + 1.2, 0));
+
+const anode = new THREE.Mesh(new THREE.BoxGeometry(0.7, 9, 5.5), new THREE.MeshPhongMaterial({ color: 0xb7c0c8 }));
+anode.position.set(-8, 6.5, 0); cell.add(anode);
+cell.add(lblAt('陽極：亜鉛板（＋）', 0.5, -8, 12.4, 0));
+const cathode = new THREE.Mesh(new THREE.BoxGeometry(0.7, 8, 4.6), new THREE.MeshPhongMaterial({ color: 0x55626e }));
+cathode.position.set(8, 6.2, 0); cell.add(cathode);
+cell.add(lblAt('陰極：製品（－）', 0.5, 8, 12.4, 0));
+
+// 成長する亜鉛皮膜
+let layerThick = 0.05;
+const znLayer = new THREE.Mesh(new THREE.BoxGeometry(1, 7.4, 4.4),
+  new THREE.MeshPhongMaterial({ color: 0xc6d2dd, emissive: 0x223344, emissiveIntensity: 0.2 }));
+cell.add(znLayer);
+function placeLayer() { znLayer.scale.x = layerThick; znLayer.position.set(8 - 0.35 - layerThick / 2, 6.2, 0); }
+placeLayer();
+// クロメート層（場面6以降）
+const chrom = group('chromate');
+const chromLayer = new THREE.Mesh(new THREE.BoxGeometry(0.25, 7.4, 4.4),
+  new THREE.MeshPhongMaterial({ color: 0xe9c33a, transparent: true, opacity: 0.85, emissive: 0x5a4a00, emissiveIntensity: 0.3 }));
+chrom.add(chromLayer);
+chrom.add(lblAt('クロメート皮膜（防錆・色）', 0.45, 8, 1.4, 0));
+function placeChrom() { chromLayer.position.set(8 - 0.35 - layerThick - 0.12, 6.2, 0); }
+placeChrom();
+
+// 整流器＋配線
+const rect = new THREE.Mesh(new THREE.BoxGeometry(4, 2.6, 2), new THREE.MeshPhongMaterial({ color: 0x2c3b4f }));
+rect.position.set(0, 16.5, 0); cell.add(rect);
+cell.add(lblAt('整流器（直流電源）', 0.5, 0, 18.4, 0));
+cell.add(lblAt('＋', 0.5, -2.4, 16.5, 0, '#fff', 'rgba(200,60,60,0.95)'));
+cell.add(lblAt('－', 0.5, 2.4, 16.5, 0, '#fff', 'rgba(60,90,200,0.95)'));
+function wire(points, color) {
+  const g = new THREE.BufferGeometry().setFromPoints(points.map(p => new THREE.Vector3(...p)));
+  return new THREE.Line(g, new THREE.LineBasicMaterial({ color }));
+}
+cell.add(wire([[-8, 11, 0], [-8, 16.5, 0], [-2, 16.5, 0]], 0xc05050));
+cell.add(wire([[2, 16.5, 0], [8, 16.5, 0], [8, 10.2, 0]], 0x5060c0));
+
+// 電子 e-（外部配線を流れる）
+const eCurve = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(-8, 11, 0), new THREE.Vector3(-8, 16.5, 0), new THREE.Vector3(0, 16.5, 0),
+  new THREE.Vector3(8, 16.5, 0), new THREE.Vector3(8, 10.2, 0)]);
+const electrons = [];
+for (let i = 0; i < 10; i++) {
+  const mm = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffd23d }));
+  cell.add(mm); electrons.push({ mesh: mm, t: i / 10 });
+}
+cell.add(lblAt('電子 e⁻', 0.42, 0, 15.2, 0, '#3a2e00', 'rgba(255,210,61,0.95)'));
+
+// Zn2+ イオン
+const ions = [];
+for (let i = 0; i < 30; i++) {
+  const mm = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 10), new THREE.MeshBasicMaterial({ color: 0x6fc0ff }));
+  const y = 2 + Math.random() * 8, z = (Math.random() - 0.5) * 4;
+  mm.position.set(-7 + Math.random() * 2, y, z); cell.add(mm);
+  ions.push({ mesh: mm, y, z, speed: 1.2 + Math.random() * 1.4, phase: Math.random() });
+}
+cell.add(lblAt('Zn²⁺（亜鉛イオン）', 0.42, -2, 2.0, 0, '#06314f', 'rgba(111,192,255,0.95)'));
+
+// 水素の泡
+const h2N = 24, h2Pos = new Float32Array(h2N * 3), h2Seed = [];
+for (let i = 0; i < h2N; i++) {
+  const x = 7 + Math.random(), y = 2 + Math.random() * 7, z = (Math.random() - 0.5) * 4;
+  h2Pos.set([x, y, z], i * 3); h2Seed.push({ sp: 1 + Math.random() * 1.5 });
+}
+const h2Geo = new THREE.BufferGeometry(); h2Geo.setAttribute('position', new THREE.BufferAttribute(h2Pos, 3));
+cell.add(new THREE.Points(h2Geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.2, transparent: true, opacity: 0.7 })));
+
+/* ====================================================================
+   INTRO（犠牲防食）
+   ==================================================================== */
+const intro = group('intro'); intro.position.set(0, 0, 60);
+function bar(x, coated) {
+  const g = new THREE.Group(); g.position.set(x, 0, 0);
+  const steel = new THREE.Mesh(new THREE.BoxGeometry(2.4, 9, 2.4), new THREE.MeshPhongMaterial({ color: 0x6b7682 }));
+  steel.position.y = 6; g.add(steel);
+  if (coated) {
+    const zinc = new THREE.Mesh(new THREE.BoxGeometry(2.7, 9.2, 2.7),
+      new THREE.MeshPhongMaterial({ color: 0xc6d2dd, transparent: true, opacity: 0.6 }));
+    zinc.position.y = 6; g.add(zinc);
+    g.add(lblAt('亜鉛めっき有り：守られる', 0.55, 0, 12, 0));
+  } else {
+    for (let i = 0; i < 14; i++) {
+      const r = new THREE.Mesh(new THREE.SphereGeometry(0.4 + Math.random() * 0.3, 8, 8), new THREE.MeshPhongMaterial({ color: 0x8a3b18 }));
+      r.position.set((Math.random() - 0.5) * 2.2, 1.5 + Math.random() * 8, 1.25); g.add(r);
+    }
+    g.add(lblAt('めっき無し：錆びる', 0.55, 0, 12, 0));
+  }
+  return g;
+}
+intro.add(bar(-5, false)); intro.add(bar(5, true));
+intro.add(lblAt('亜鉛が「身代わり」に錆びて鉄を守る（犠牲防食）', 0.6, 0, 15, 0));
+
+/* ====================================================================
+   SURFACE（前処理）
+   ==================================================================== */
+const surf = group('surface'); surf.position.set(0, 0, -55);
+const plate = new THREE.Mesh(new THREE.BoxGeometry(14, 9, 0.6), new THREE.MeshPhongMaterial({ color: 0x55626e }));
+plate.position.y = 6; surf.add(plate);
+for (let i = 0; i < 18; i++) {
+  const o = new THREE.Mesh(new THREE.SphereGeometry(0.5 + Math.random() * 0.5, 10, 10),
+    new THREE.MeshPhongMaterial({ color: 0x4a3a12, transparent: true, opacity: 0.85 }));
+  o.position.set((Math.random() - 0.5) * 12, 2 + Math.random() * 8, 0.45); o.scale.z = 0.3; surf.add(o);
+}
+surf.add(lblAt('前処理で油・サビ・酸化膜を落とす', 0.6, 0, 12.2, 0));
+surf.add(lblAt('汚れたまま → めっきが密着しない', 0.5, 0, -1.2, 0, '#fff', 'rgba(150,60,40,0.95)'));
+
+/* ====================================================================
+   THICKNESS（膜厚と時間）
+   ==================================================================== */
+const thick = group('thickness');
+thick.add(lblAt('めっき厚 ＝ 電流 × 時間（例：2〜25μm）', 0.5, 8.5, 9.5, 3));
+const hair = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 7, 8), new THREE.MeshPhongMaterial({ color: 0x3a2a1a }));
+hair.position.set(11.5, 6, 2); thick.add(hair);
+thick.add(lblAt('髪の毛 約70μm', 0.4, 11.5, 10, 2));
+
+/* ====================================================================
+   CROSS（完成断面：鉄/亜鉛/クロメート）
+   ==================================================================== */
+const cross = group('cross'); cross.position.set(0, 0, -28);
+function layerBox(w, color, x, label, lw) {
+  const g = new THREE.Group();
+  const mm = new THREE.Mesh(new THREE.BoxGeometry(w, 8, 6), new THREE.MeshPhongMaterial({ color }));
+  mm.position.set(x, 6, 0); g.add(mm);
+  g.add(lblAt(label, 0.5, x, lw, 0));
+  return g;
+}
+cross.add(layerBox(6, 0x6b7682, -3, '素地（鉄）', 11));
+cross.add(layerBox(2.2, 0xc6d2dd, 1.1, '亜鉛めっき層', 13));
+cross.add(layerBox(0.8, 0xe9c33a, 2.6, 'クロメート皮膜', 1.5));
+cross.add(lblAt('完成しためっきの断面（3層構造）', 0.6, 0, 15, 0));
+
+/* ====================================================================
+   XRF（品質管理）
+   ==================================================================== */
+const xrf = group('xrf');
+const gun = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.9, 3.5, 12), new THREE.MeshPhongMaterial({ color: 0x2c3b4f }));
+gun.rotation.z = Math.PI / 2; gun.position.set(13, 8, 0); xrf.add(gun);
+const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.4, 4.5, 8), new THREE.MeshBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.5 }));
+beam.rotation.z = Math.PI / 2; beam.position.set(9.6, 8, 0); xrf.add(beam);
+xrf.add(lblAt('蛍光X線 膜厚計', 0.5, 14, 11, 0));
+xrf.add(lblAt('膜厚 8μm（一例）／ハルセル試験で外観確認', 0.5, 6, 2.5, 0, '#06314f', 'rgba(127,208,255,0.95)'));
+
+/* ---------- 場面 ---------- */
+const SCENES = [
+  { btn: '① 役割', title: '場面1：めっきの役割（犠牲防食）',
+    desc: '<b>亜鉛めっきは、鉄を錆から守るための「身代わり」です。</b>めっきが無い鉄は錆びますが、亜鉛めっきがあると、まず亜鉛が先に錆びて中の鉄を守ります（犠牲防食）。',
+    show: ['intro'], pos: [0, 9, 88], tgt: [0, 6, 60] },
+  { btn: '② 前処理', title: '場面2：前処理（密着のため汚れを落とす）',
+    desc: '<b>めっきの前に、油・サビ・酸化膜をしっかり落とします。</b>表面が汚れたままだと、めっきが密着せず剥がれます。前処理が仕上がりの良し悪しを決めます。',
+    show: ['surface'], pos: [0, 8, -38], tgt: [0, 6, -55] },
+  { btn: '③ 槽の中', title: '場面3：めっき槽の中のしくみ',
+    desc: '<b>槽の中。左の「陽極」は亜鉛板、右の「陰極」がめっきする製品です。</b>整流器（直流電源）でプラスとマイナスをつなぎ、電解液（アルカリ亜鉛浴）に電気を流します。',
+    show: ['cell'], pos: [0, 12, 36], tgt: [0, 7, 0] },
+  { btn: '④ 反応', title: '場面4：電析反応（電気で亜鉛が積もる）',
+    desc: '<b>電気を流すと、亜鉛が陽極から溶けてZn²⁺（亜鉛イオン）になり、電解液の中を陰極（製品）へ移動します。</b>陰極で電子を受け取って亜鉛の金属に戻り、表面に積もっていきます。これがめっきです（同時に水素の泡も出ます）。',
+    show: ['cell'], pos: [9, 8, 17], tgt: [8, 6, 0] },
+  { btn: '⑤ 膜厚', title: '場面5：膜厚は「電流×時間」',
+    desc: '<b>めっきの厚みは、流す電流の強さと時間で決まります。</b>厚さはたとえば2〜25μm（マイクロメートル）。髪の毛（約70μm）よりずっと薄い世界です。',
+    show: ['cell', 'thickness'], pos: [11, 8, 16], tgt: [9, 6, 1] },
+  { btn: '⑥ クロメート', title: '場面6：クロメート処理（防錆＋色）',
+    desc: '<b>めっきの後、クロメート処理で薄い化成皮膜をかぶせます。</b>これでサビにくさが大きく上がり、色（ユニクロ／有色／黒）も付きます。六価を使わない三価クロメートが主流です。',
+    show: ['cell', 'chromate'], pos: [10, 8, 16], tgt: [8, 6, 0] },
+  { btn: '⑦ 断面', title: '場面7：完成しためっきの断面',
+    desc: '<b>仕上がりは3層構造です。</b>いちばん下が素地（鉄）、その上に亜鉛めっき層、いちばん外側にクロメート皮膜。この重なりで、鉄を長くサビから守ります。',
+    show: ['cross'], pos: [0, 9, -10], tgt: [0, 6, -28] },
+  { btn: '⑧ 品質', title: '場面8：フジ化学の品質管理',
+    desc: '<b>でき上がっためっきは、蛍光X線の膜厚計で厚みを測り、ハルセル試験などで外観を確認します。</b>決められた厚み・外観を満たしているかを検査して、品質を保証します。',
+    show: ['cell', 'chromate', 'xrf'], pos: [12, 9, 18], tgt: [8, 6, 0] },
+];
+function setVisible(list) { for (const kk in GROUPS) GROUPS[kk].visible = list.includes(kk); }
+
+let camFrom = null, camTo = null, camT = 1, curScene = 0;
+function gotoScene(i) {
+  const sc = SCENES[i]; curScene = i; setVisible(sc.show);
+  camFrom = { p: camera.position.clone(), t: controls.target.clone() };
+  const aspect = window.innerWidth / Math.max(window.innerHeight, 1);
+  const f = Math.max(1, 1.05 / Math.max(aspect, 0.2));
+  const tgtV = new THREE.Vector3(...sc.tgt);
+  const posV = tgtV.clone().add(new THREE.Vector3(...sc.pos).sub(tgtV).multiplyScalar(f));
+  camTo = { p: posV, t: tgtV }; camT = 0;
+  document.getElementById('info').innerHTML = `<b>${sc.title}</b><br>${sc.desc}`;
+  document.querySelectorAll('.sbtn').forEach((b, j) => b.classList.toggle('active', j === i));
+}
+const btnWrap = document.getElementById('scenebtns');
+SCENES.forEach((sc, i) => { const b = document.createElement('button'); b.className = 'sbtn'; b.textContent = sc.btn; b.onclick = () => gotoScene(i); btnWrap.appendChild(b); });
+document.getElementById('playbtn').onclick = function () { playing = !playing; this.textContent = playing ? '⏸ 一時停止' : '▶ 再生'; };
+document.getElementById('spdbtn').onclick = function () { speed = (speed === 1) ? 2 : 1; this.textContent = `速度 ${speed}x`; };
+let playing = true, speed = 1;
+
+/* ---------- ツアー ---------- */
+const params = new URLSearchParams(location.search);
+const TOUR = params.get('tour') === '1';
+const DWELL = 7, ORBIT = 0.10;
+let tourT0 = -1, tourEnded = false, tourArmed = false;
+window.__tourInfo = { dwell: DWELL, scenes: SCENES.length, total: DWELL * SCENES.length };
+window.__beginTour = () => { tourArmed = true; };
+
+const clock = new THREE.Clock();
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 0.05); const t = clock.elapsedTime;
+  if (TOUR && tourArmed) {
+    if (tourT0 < 0) tourT0 = t;
+    const el = t - tourT0; const idx = Math.min(SCENES.length - 1, Math.floor(el / DWELL));
+    if (idx !== curScene) gotoScene(idx);
+    if (!tourEnded && el >= DWELL * SCENES.length) { tourEnded = true; window.__tourEnded = true; if (window.__onTourEnd) { try { window.__onTourEnd(); } catch (e) {} } }
+  }
+  if (playing) {
+    const platingFace = 8 - 0.35 - layerThick;
+    for (const io of ions) {
+      io.mesh.position.x += io.speed * dt * 1.4;
+      io.mesh.position.y = io.y + Math.sin(t * 1.5 + io.phase * 6) * 0.25;
+      if (io.mesh.position.x >= platingFace) {
+        io.mesh.position.x = -7 + Math.random() * 1.5; io.y = 2 + Math.random() * 8; io.z = (Math.random() - 0.5) * 4; io.mesh.position.z = io.z;
+        if (layerThick < 0.95 && GROUPS.cell.visible) layerThick += 0.006;
+      }
+    }
+    placeLayer(); placeChrom();
+    for (const e of electrons) { e.t = (e.t + dt * 0.12) % 1; e.mesh.position.copy(eCurve.getPoint(e.t)); }
+    const arr = h2Geo.attributes.position.array;
+    for (let i = 0; i < h2Seed.length; i++) { let y = arr[i * 3 + 1] + h2Seed[i].sp * dt; if (y > TANKH - 1) y = 2; arr[i * 3 + 1] = y; }
+    h2Geo.attributes.position.needsUpdate = true;
+  }
+  if (curScene <= 1) layerThick = 0.05;
+
+  if (camT < 1) {
+    camT = Math.min(1, camT + dt / 1.2);
+    const e = camT < 0.5 ? 2 * camT * camT : 1 - Math.pow(-2 * camT + 2, 2) / 2;
+    camera.position.lerpVectors(camFrom.p, camTo.p, e); controls.target.lerpVectors(camFrom.t, camTo.t, e);
+  } else if (TOUR) {
+    const off = camera.position.clone().sub(controls.target); const a = ORBIT * dt;
+    const nx = off.x * Math.cos(a) - off.z * Math.sin(a), nz = off.x * Math.sin(a) + off.z * Math.cos(a);
+    camera.position.set(controls.target.x + nx, camera.position.y, controls.target.z + nz);
+  }
+  if (!TOUR) controls.update(); else camera.lookAt(controls.target);
+  renderer.render(scene, camera);
+}
+
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  clearTimeout(resizeTimer); resizeTimer = setTimeout(() => gotoScene(curScene), 350);
+});
+
+if (TOUR) {
+  document.getElementById('bottombar').style.display = 'none';
+  document.getElementById('playbtn').style.display = 'none';
+  document.getElementById('spdbtn').style.display = 'none';
+  const h = document.querySelector('#topbar h1'); if (h) h.textContent = 'フジ化学 電気亜鉛めっき 生成プロセス（自動再生）';
+  controls.enabled = false; playing = true; speed = 1;
+  setTimeout(() => { tourArmed = true; }, 800);
+}
+camera.position.set(0, 10, 70);
+controls.target.set(0, 6, 0);
+gotoScene(0);
+tick();
+</script>
+</body>
+</html>
