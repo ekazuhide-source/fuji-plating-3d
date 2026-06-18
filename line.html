@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>フジ化学 エレベーター式全自動めっき装置 3D動作説明（暫定版）</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;font-family:"Meiryo","Hiragino Sans",sans-serif;background:#eef2f7;}
+  #app{position:relative;width:100%;height:100%;}
+  canvas{display:block;}
+  #topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;
+    padding:8px 12px;background:rgba(255,255,255,.92);border-bottom:1px solid #d4dce4;z-index:10;}
+  #topbar h1{font-size:15px;margin:0;color:#1a3550;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .badge{font-size:11px;background:#fff3cd;color:#7a5b00;border:1px solid #e6c860;border-radius:4px;padding:2px 6px;white-space:nowrap;}
+  .ctlbtn{font-size:13px;padding:8px 14px;border-radius:8px;border:1px solid #9ab0c4;background:#fff;color:#1a3550;cursor:pointer;white-space:nowrap;}
+  .ctlbtn:active{background:#dce8f2;}
+  #bottombar{position:absolute;left:0;right:0;bottom:0;z-index:10;background:rgba(255,255,255,.94);
+    border-top:1px solid #d4dce4;padding:6px 8px 10px;}
+  #info{font-size:13px;color:#243b50;line-height:1.55;padding:4px 6px 8px;max-height:110px;overflow-y:auto;}
+  #info b{color:#0d2b45;}
+  #scenebtns{display:flex;gap:6px;overflow-x:auto;padding:2px;-webkit-overflow-scrolling:touch;}
+  .sbtn{flex:0 0 auto;font-size:13px;padding:10px 12px;border-radius:10px;border:1px solid #9ab0c4;
+    background:#f4f8fb;color:#1a3550;cursor:pointer;min-width:84px;text-align:center;}
+  .sbtn.active{background:#1a5fa8;color:#fff;border-color:#1a5fa8;font-weight:bold;}
+  #err{position:absolute;top:40%;left:0;right:0;text-align:center;color:#a33;font-size:15px;display:none;z-index:20;}
+  /* タブレット・スマホ（狭幅）対応 */
+  @media (max-width: 900px){
+    #topbar h1{font-size:12px;}
+    .badge{font-size:9px;padding:1px 4px;} /* タブレットでも「推定」注記は必ず表示（評価指摘#1） */
+    .ctlbtn{font-size:12px;padding:7px 10px;}
+    #info{font-size:12px;max-height:96px;line-height:1.5;}
+    .sbtn{font-size:12px;min-width:70px;padding:9px 8px;}
+  }
+  @media (max-height: 600px){
+    #info{max-height:60px;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <h1>フジ化学 エレベーター式全自動めっき装置（楕円ループ）3D動作説明</h1>
+    <span class="badge">暫定版・槽の並び順は推定</span>
+    <button class="ctlbtn" id="playbtn">⏸ 一時停止</button>
+    <button class="ctlbtn" id="spdbtn">速度 1x</button>
+  </div>
+  <div id="err">WebGL を初期化できませんでした。ブラウザ／ネット接続をご確認ください。</div>
+  <div id="bottombar">
+    <div id="info"></div>
+    <div id="scenebtns"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ---------- 基本セットアップ ---------- */
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+} catch (e) {
+  document.getElementById('err').style.display = 'block';
+  throw e;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.getElementById('app').prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xeef2f7);
+scene.fog = new THREE.Fog(0xeef2f7, 130, 280);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 600);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.minDistance = 6;
+controls.maxDistance = 180;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(40, 70, 50);
+scene.add(sun);
+
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(420, 260),
+  new THREE.MeshLambertMaterial({ color: 0xd8e0e8 })
+);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+const grid = new THREE.GridHelper(420, 84, 0xb8c4d0, 0xc8d4de);
+grid.position.y = 0.01;
+scene.add(grid);
+
+/* ---------- 日本語ラベル（canvasスプライト） ---------- */
+function makeLabel(text, scale = 0.55, bg = 'rgba(255,255,255,0.92)', fg = '#16314a') {
+  const pad = 18, fs = 44;
+  const cv = document.createElement('canvas');
+  const mctx = cv.getContext('2d');
+  mctx.font = `bold ${fs}px Meiryo, sans-serif`;
+  const w = Math.ceil(mctx.measureText(text).width) + pad * 2;
+  cv.width = w; cv.height = fs + pad * 2;
+  const c2 = cv.getContext('2d');
+  c2.fillStyle = bg;
+  c2.strokeStyle = '#7a93aa';
+  c2.lineWidth = 3;
+  c2.beginPath();
+  c2.roundRect(2, 2, cv.width - 4, cv.height - 4, 16);
+  c2.fill(); c2.stroke();
+  c2.font = `bold ${fs}px Meiryo, sans-serif`;
+  c2.fillStyle = fg;
+  c2.textBaseline = 'middle';
+  c2.fillText(text, pad, cv.height / 2 + 2);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+  sp.scale.set(cv.width / 60 * scale, cv.height / 60 * scale, 1);
+  return sp;
+}
+
+/* ---------- 楕円（スタジアム形）ループの軌道 ----------
+   エレベーター式：キャリアが楕円軌道を周回し、停止位置で一斉昇降する。
+   直線部L×2＋半円R×2のスタジアム形で近似。 */
+const L = 46, R = 15;
+const PERIM = 2 * L + 2 * Math.PI * R;
+
+function pathPoint(t) { // t∈[0,1) → ワールド座標（経路は反時計回り・手前直線が+Z側）
+  let d = ((t % 1) + 1) % 1 * PERIM;
+  if (d < L) return new THREE.Vector3(d, 0, R);                       // 手前直線（+X向き）
+  d -= L;
+  const A1 = Math.PI * R;
+  if (d < A1) { const a = d / R; return new THREE.Vector3(L + Math.sin(a) * R, 0, Math.cos(a) * R); } // 右端の半円
+  d -= A1;
+  if (d < L) return new THREE.Vector3(L - d, 0, -R);                  // 奥直線（-X向き）
+  d -= L;
+  const a = d / R;
+  return new THREE.Vector3(-Math.sin(a) * R, 0, -Math.cos(a) * R);    // 左端の半円
+}
+function pathHeading(t) { // 進行方向のrotation.y（数値微分・符号バグ防止）
+  const p1 = pathPoint(t), p2 = pathPoint(t + 0.0005);
+  return Math.atan2(-(p2.z - p1.z), p2.x - p1.x);
+}
+const dToT = d => d / PERIM;
+
+/* ---------- ステーション配置（経路上の距離dで指定・並び順は推定） ---------- */
+const BS = L + Math.PI * R;     // 奥直線の開始距離（右端半円の終わり）
+const LA = 2 * L + Math.PI * R; // 左端半円の開始距離（奥直線の終わり）
+const STATIONS = [
+  // 手前直線：投入→前処理
+  { d: 3,            name: '投入',            kind: 'station', color: 0x9aa6b0 },
+  { d: 9,            name: 'アルカリ脱脂',     kind: 'tank', color: 0x4f7bd9, bubbles: true },
+  { d: 14.5,         name: '水洗',            kind: 'tank', color: 0x86d8ea },
+  { d: 20,           name: '酸洗(塩酸)',      kind: 'tank', color: 0xe3cf57 },
+  { d: 25.5,         name: '水洗',            kind: 'tank', color: 0x86d8ea },
+  { d: 31,           name: '電解脱脂',        kind: 'tank', color: 0x4f9bd9, bubbles: true },
+  { d: 36.5,         name: '水洗',            kind: 'tank', color: 0x86d8ea },
+  // 右端の半円＝旋回部（槽なし）
+  // 奥直線：めっき（アルカリジンケート浴）→後処理
+  { d: BS + 5,      name: 'ジンケート浴①',   kind: 'tank', color: 0x90a4bc, bubbles: true, wide: true },
+  { d: BS + 13,     name: 'ジンケート浴②',   kind: 'tank', color: 0x90a4bc, bubbles: true, wide: true },
+  { d: BS + 21,     name: 'ジンケート浴③',   kind: 'tank', color: 0x90a4bc, bubbles: true, wide: true },
+  { d: BS + 27.5,   name: '水洗',            kind: 'tank', color: 0x86d8ea },
+  { d: BS + 33,     name: '硝酸活性化',      kind: 'tank', color: 0xf0c98a },
+  { d: BS + 38.5,   name: 'クロメート',      kind: 'tank', color: 0xa8d18a },
+  { d: BS + 44,     name: '水洗',            kind: 'tank', color: 0x86d8ea },
+  // 左端の半円：乾燥→取出し→（投入へ戻る＝ループ）
+  { d: LA + Math.PI * R * 0.28, name: '乾燥',   kind: 'oven', color: 0xe8804f },
+  { d: LA + Math.PI * R * 0.62, name: '取出し', kind: 'station', color: 0x9aa6b0 },
+];
+
+const TANK_H = 5, TANK_D = 6;
+const highlightables = [];
+const stationsByName = {};
+let si = 0;
+for (const st of STATIONS) {
+  st.t = dToT(st.d);
+  const p = pathPoint(st.t);
+  const head = pathHeading(st.t);
+  const w = st.wide ? 7 : 4;
+  st.w = w; st.pos = p;
+
+  const g = new THREE.Group();
+  g.position.copy(p);
+  g.rotation.y = head;
+
+  if (st.kind === 'tank') {
+    const shell = new THREE.Mesh(
+      new THREE.BoxGeometry(w, TANK_H, TANK_D),
+      new THREE.MeshLambertMaterial({ color: 0xb8c4cc })
+    );
+    shell.position.y = TANK_H / 2;
+    g.add(shell);
+    st.shellMat = shell.material;
+    const liquid = new THREE.Mesh(
+      new THREE.BoxGeometry(w - 0.3, 0.18, TANK_D - 0.3),
+      new THREE.MeshLambertMaterial({ color: st.color, transparent: true, opacity: 0.95 })
+    );
+    liquid.position.y = TANK_H + 0.02;
+    g.add(liquid);
+    const band = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 0.06, 1.0, TANK_D + 0.06),
+      new THREE.MeshLambertMaterial({ color: st.color })
+    );
+    band.position.y = TANK_H - 0.6;
+    g.add(band);
+  } else if (st.kind === 'oven') {
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 1, TANK_H + 2.4, TANK_D),
+      new THREE.MeshLambertMaterial({ color: 0xc9805c })
+    );
+    body.position.y = (TANK_H + 2.4) / 2;
+    g.add(body);
+    st.shellMat = body.material;
+    const stripe = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 1.1, 0.7, TANK_D + 0.1),
+      new THREE.MeshLambertMaterial({ color: 0xe8a23f })
+    );
+    stripe.position.y = TANK_H + 1.2;
+    g.add(stripe);
+  } else {
+    const plat = new THREE.Mesh(
+      new THREE.BoxGeometry(w, 1.1, TANK_D + 2),
+      new THREE.MeshLambertMaterial({ color: st.color })
+    );
+    plat.position.y = 0.55;
+    g.add(plat);
+    st.shellMat = plat.material;
+  }
+
+  const lb = makeLabel(st.name, 0.55);
+  const stagger = st.wide ? 2.4 : (si % 2 === 0) ? 1.6 : 3.2; // ジンケート浴3槽は高さ統一（評価指摘#2）
+  lb.position.set(0, (st.kind === 'oven' ? TANK_H + 3.8 : TANK_H + stagger), 0);
+  g.add(lb);
+
+  scene.add(g);
+  st.group = g;
+  highlightables.push(st);
+  (stationsByName[st.name] = stationsByName[st.name] || []).push(st);
+  si++;
+}
+const CTR = new THREE.Vector3(L / 2, 0, 0); // ループ中心
+
+/* ---------- 楕円レール（キャリア軌道）と支柱 ---------- */
+const RAIL_Y = 10.2;
+{
+  const pts = [];
+  for (let i = 0; i < 200; i++) {
+    const p = pathPoint(i / 200);
+    pts.push(new THREE.Vector3(p.x, RAIL_Y, p.z));
+  }
+  const curve = new THREE.CatmullRomCurve3(pts, true);
+  const rail = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 240, 0.3, 8, true),
+    new THREE.MeshLambertMaterial({ color: 0x6a7d8e })
+  );
+  scene.add(rail);
+  for (let i = 0; i < 10; i++) { // 支柱（ループ内側に配置）
+    const p = pathPoint(i / 10);
+    const inward = new THREE.Vector3().subVectors(CTR, p).setY(0).normalize().multiplyScalar(2.2);
+    const col = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, RAIL_Y, 0.7),
+      new THREE.MeshLambertMaterial({ color: 0x7d8fa0 })
+    );
+    col.position.set(p.x + inward.x, RAIL_Y / 2, p.z + inward.z);
+    scene.add(col);
+    const arm = new THREE.Mesh(
+      new THREE.BoxGeometry(2.4, 0.4, 0.4),
+      new THREE.MeshLambertMaterial({ color: 0x7d8fa0 })
+    );
+    arm.position.set(p.x + inward.x / 2, RAIL_Y, p.z + inward.z / 2);
+    arm.rotation.y = Math.atan2(-inward.z, inward.x);
+    scene.add(arm);
+  }
+}
+
+/* ---------- キャリア群（エレベーター式・一斉昇降） ---------- */
+const TOP_Y = 7.4, DIP_Y = 2.6;
+const N_CARRIERS = 12;
+const carriers = [];
+for (let i = 0; i < N_CARRIERS; i++) {
+  const grp = new THREE.Group();
+  const trolley = new THREE.Mesh(
+    new THREE.BoxGeometry(2.4, 1.0, 1.6),
+    new THREE.MeshLambertMaterial({ color: 0x2f5d8a })
+  );
+  trolley.position.y = RAIL_Y + 0.7;
+  grp.add(trolley);
+  const cable = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.07, 0.07, 1, 6),
+    new THREE.MeshLambertMaterial({ color: 0x444c55 })
+  );
+  grp.add(cable);
+  const barrelGrp = new THREE.Group();
+  const barrel = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.15, 1.15, 2.4, 6),
+    new THREE.MeshLambertMaterial({ color: 0x1f6f6f, transparent: true, opacity: 0.85 })
+  );
+  barrel.rotation.z = Math.PI / 2;
+  barrelGrp.add(barrel);
+  const edge = new THREE.LineSegments(
+    new THREE.EdgesGeometry(barrel.geometry),
+    new THREE.LineBasicMaterial({ color: 0x0d4444 })
+  );
+  edge.rotation.z = Math.PI / 2;
+  barrelGrp.add(edge);
+  grp.add(barrelGrp);
+  scene.add(grp);
+  carriers.push({ grp, cable, barrelGrp, off: i / N_CARRIERS, y: TOP_Y, dipping: false });
+}
+
+/* エレベーターサイクル：前進(2.2s)→一斉降下(0.8s)→浸漬(2.4s)→一斉上昇(0.8s) */
+const PITCH = 5.5; // 1回の前進量（経路距離）
+const CYC = { move: 2.2, lower: 0.8, dwell: 2.4, raise: 0.8 };
+let cycPhase = 'move', cycT = 0, loopD = 0; // loopD=経路上の累積距離
+let playing = true, speed = 1;
+
+function nearTank(t) { // 経路パラメータtの位置が槽の真上か（昇降してよいか）
+  const d = ((t % 1) + 1) % 1 * PERIM;
+  for (const st of STATIONS) {
+    if (st.kind === 'station') continue;
+    let dd = Math.abs(d - st.d);
+    dd = Math.min(dd, PERIM - dd);
+    if (dd < st.w / 2 + 0.6) return st;
+  }
+  return null;
+}
+
+function updateCarriers(dt) {
+  cycT += dt * speed;
+  const dur = CYC[cycPhase];
+  if (cycPhase === 'move') {
+    loopD += (PITCH / CYC.move) * dt * speed;
+  }
+  if (cycT >= dur) {
+    cycT = 0;
+    cycPhase = { move: 'lower', lower: 'dwell', dwell: 'raise', raise: 'move' }[cycPhase];
+  }
+  for (const c of carriers) {
+    const t = dToT(loopD) + c.off;
+    const p = pathPoint(t);
+    c.grp.position.set(p.x, 0, p.z);
+    c.grp.rotation.y = pathHeading(t);
+    const st = nearTank(t);
+    let targetY = TOP_Y;
+    if (st && (cycPhase === 'lower' || cycPhase === 'dwell' || cycPhase === 'raise')) {
+      if (cycPhase === 'lower') targetY = THREE.MathUtils.lerp(TOP_Y, DIP_Y, cycT / CYC.lower);
+      else if (cycPhase === 'dwell') targetY = DIP_Y;
+      else targetY = THREE.MathUtils.lerp(DIP_Y, TOP_Y, cycT / CYC.raise);
+    }
+    c.y = targetY;
+    c.barrelGrp.position.y = c.y;
+    if (st && cycPhase === 'dwell') c.barrelGrp.rotation.x += dt * 1.8 * speed; // 浸漬中バレル回転
+    const cl = RAIL_Y + 0.2 - (c.y + 1.3);
+    c.cable.position.y = (RAIL_Y + 0.2 + c.y + 1.3) / 2;
+    c.cable.scale.y = Math.max(0.3, cl);
+  }
+}
+
+/* ---------- 投入部の見本（バレル／ラック） ---------- */
+const loadSt = STATIONS[0];
+{
+  const demo = new THREE.Group();
+  const out = new THREE.Vector3().subVectors(loadSt.pos, CTR).setY(0).normalize().multiplyScalar(6.5);
+  demo.position.set(loadSt.pos.x + out.x, 0, loadSt.pos.z + out.z);
+  const demoBarrel = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.15, 1.15, 2.4, 6),
+    new THREE.MeshLambertMaterial({ color: 0x1f6f6f, transparent: true, opacity: 0.85 })
+  );
+  demoBarrel.rotation.z = Math.PI / 2;
+  demoBarrel.position.set(-2.2, 1.6, 0);
+  demo.add(demoBarrel);
+  const lbB = makeLabel('バレル（小物・大量）', 0.4);
+  lbB.position.set(-2.2, 3.6, 0);
+  demo.add(lbB);
+  const rackFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 3.2, 0.18),
+    new THREE.MeshLambertMaterial({ color: 0x8a5a2f })
+  );
+  rackFrame.position.set(2.2, 1.7, 0);
+  demo.add(rackFrame);
+  for (let i = 0; i < 3; i++) {
+    const plate = new THREE.Mesh(
+      new THREE.BoxGeometry(1.0, 0.7, 0.08),
+      new THREE.MeshLambertMaterial({ color: 0xcfd8de })
+    );
+    plate.position.set(2.2, 2.6 - i * 1.0, 0.25);
+    demo.add(plate);
+  }
+  const lbR = makeLabel('ラック（大型・外観品）', 0.4);
+  lbR.position.set(2.2, 3.6, 0);
+  demo.add(lbR);
+  scene.add(demo);
+  window.__demoPos = demo.position.clone();
+}
+
+/* ---------- 整流器（ジンケート浴の外側）＋電気の流れ ---------- */
+const electronGroups = [];
+for (const st of STATIONS.filter(s => s.name.startsWith('ジンケート浴'))) {
+  const out = new THREE.Vector3().subVectors(st.pos, CTR).setY(0).normalize();
+  const rp = st.pos.clone().add(out.clone().multiplyScalar(TANK_D / 2 + 2.4));
+  const rect = new THREE.Mesh(
+    new THREE.BoxGeometry(2.4, 2.4, 1.4),
+    new THREE.MeshLambertMaterial({ color: 0x3d4f5e })
+  );
+  rect.position.set(rp.x, 1.2, rp.z);
+  rect.rotation.y = pathHeading(st.t);
+  scene.add(rect);
+  const lb = makeLabel('整流器', 0.4);
+  lb.position.set(rp.x, 3.4, rp.z);
+  scene.add(lb);
+  const pts = [];
+  const eGeo = new THREE.SphereGeometry(0.14, 8, 8);
+  const eMat = new THREE.MeshBasicMaterial({ color: 0xffb83d });
+  for (let i = 0; i < 5; i++) {
+    const m = new THREE.Mesh(eGeo, eMat);
+    scene.add(m);
+    pts.push({ mesh: m, t: i / 5 });
+  }
+  electronGroups.push({
+    pts,
+    from: new THREE.Vector3(rp.x, 2.4, rp.z),
+    to: new THREE.Vector3(st.pos.x, TANK_H - 0.2, st.pos.z),
+  });
+}
+
+/* ---------- 制御盤（PLC・手前直線の外側） ---------- */
+const plc = new THREE.Group();
+plc.position.set(14, 0, R + TANK_D / 2 + 5.5);
+const cab = new THREE.Mesh(
+  new THREE.BoxGeometry(2.0, 4.0, 1.0),
+  new THREE.MeshLambertMaterial({ color: 0xbac4ce })
+);
+cab.position.y = 2.0;
+plc.add(cab);
+const led = new THREE.Mesh(
+  new THREE.SphereGeometry(0.16, 8, 8),
+  new THREE.MeshBasicMaterial({ color: 0x35d435 })
+);
+led.position.set(0.5, 3.3, 0.55);
+plc.add(led);
+const screen = new THREE.Mesh(
+  new THREE.PlaneGeometry(1.2, 0.9),
+  new THREE.MeshBasicMaterial({ color: 0x10324e })
+);
+screen.position.set(-0.2, 2.6, 0.52);
+plc.add(screen);
+const lbP = makeLabel('制御盤（PLC）', 0.45);
+lbP.position.set(0, 4.8, 0);
+plc.add(lbP);
+scene.add(plc);
+
+/* ---------- 泡（脱脂・電解脱脂・ジンケート浴） ---------- */
+const bubbleSystems = [];
+for (const st of STATIONS) {
+  if (!st.bubbles) continue;
+  const N = 45;
+  const pos = new Float32Array(N * 3);
+  const seed = [];
+  for (let i = 0; i < N; i++) {
+    const sx = st.pos.x + (Math.random() - 0.5) * (st.w - 1);
+    const sz = st.pos.z + (Math.random() - 0.5) * (TANK_D - 1.5);
+    pos.set([sx, 1 + Math.random() * (TANK_H - 1.6), sz], i * 3);
+    seed.push({ sp: 0.6 + Math.random() * 1.2 });
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo,
+    new THREE.PointsMaterial({ color: 0xffffff, size: 0.16, transparent: true, opacity: 0.8 }));
+  scene.add(pts);
+  bubbleSystems.push({ geo, seed, top: TANK_H - 0.5 });
+}
+
+/* ---------- 乾燥の熱気 ---------- */
+const drySt = STATIONS.find(s => s.kind === 'oven');
+const heatN = 26;
+const heatPos = new Float32Array(heatN * 3);
+const heatSeed = [];
+for (let i = 0; i < heatN; i++) {
+  const sx = drySt.pos.x + (Math.random() - 0.5) * 4;
+  const sz = drySt.pos.z + (Math.random() - 0.5) * 4;
+  heatPos.set([sx, TANK_H + 2.5 + Math.random() * 3, sz], i * 3);
+  heatSeed.push({ x: sx, z: sz, sp: 0.8 + Math.random() });
+}
+const heatGeo = new THREE.BufferGeometry();
+heatGeo.setAttribute('position', new THREE.BufferAttribute(heatPos, 3));
+scene.add(new THREE.Points(heatGeo,
+  new THREE.PointsMaterial({ color: 0xe8804f, size: 0.22, transparent: true, opacity: 0.55 })));
+
+/* ---------- 流れの光点（レール沿いを周回） ---------- */
+const flowDots = [];
+for (let i = 0; i < 16; i++) {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0x2f8fe8 })
+  );
+  scene.add(m);
+  flowDots.push({ mesh: m, t: i / 16 });
+}
+
+/* ---------- 場面定義 ---------- */
+const zincMid = STATIONS.find(s => s.name === 'ジンケート浴②');
+const SCENES = [
+  { btn: '① 全景', title: '場面1：エレベーター式・楕円ループ全景',
+    desc: '<b>キャリア（吊り具）が楕円軌道を周回する全自動装置。</b>「1ピッチ前進→一斉に降下→浸漬→一斉に上昇」を繰り返し、複数のワークが同時に流れることで連続生産します。※槽の並び順は推定です（実ライン情報で今後修正）。＜操作：ドラッグ＝回転／ピンチまたはホイール＝ズーム＞',
+    pos: [L / 2, 58, 90], tgt: [L / 2, 2, 0], hl: [] },
+  { btn: '② 投入', title: '場面2：ワーク投入（バレルとラック）',
+    desc: '<b>品物の載せ方は2通り。</b>「バレル」は六角形のカゴを回転させ、ねじ等の小物を大量に処理。「ラック」は治具に1個ずつ固定し、大型品・外観重視品を処理します。投入と取出しがループの同じ側に並ぶのがループ式の特長です。',
+    pos: [loadSt.pos.x + 4, 9, loadSt.pos.z + 18], tgt: [loadSt.pos.x, 2.5, loadSt.pos.z + 3], hl: ['投入', '取出し'] },
+  { btn: '③ 前処理', title: '場面3：前処理（品質の8割はここで決まる）',
+    desc: '<b>脱脂→水洗→酸洗→水洗→電解脱脂→水洗。</b>油を落とし（脱脂）、錆・酸化膜を溶かし（酸洗）、電気の泡で仕上げ洗浄（電解脱脂）。ここが不十分だと、めっきの剥がれ・ムラなど後工程では直せない不良になります。',
+    pos: [23, 13, R + 24], tgt: [23, 2.5, R], hl: ['アルカリ脱脂', '酸洗(塩酸)', '電解脱脂', '水洗'] },
+  { btn: '④ めっき', title: '場面4：亜鉛めっき（アルカリジンケート浴）',
+    desc: '<b>当社の浴種はアルカリジンケート浴（シアンを使わない環境対応型）。</b>酸化亜鉛と水酸化ナトリウムの強アルカリ液で、複雑な形状にも均一にめっきが付くのが長所です。整流器（直流電源）から品物に電気を流すと、液中の亜鉛が表面に析出します。電流（電流密度）×時間で膜厚が決まります。',
+    pos: [zincMid.pos.x, 11, zincMid.pos.z - 24], tgt: [zincMid.pos.x, 3, zincMid.pos.z], hl: ['ジンケート浴①', 'ジンケート浴②', 'ジンケート浴③'] },
+  { btn: '⑤ 後処理', title: '場面5：後処理（色付けと防錆）',
+    desc: '<b>水洗→硝酸活性化→クロメート→水洗。</b>めっき表面を整えてから、クロメート処理で化成皮膜を付けます。色（ユニクロ/有色/黒）が付き、防錆力が大きく向上します。',
+    pos: [STATIONS[11].pos.x - 4, 12, STATIONS[11].pos.z - 22], tgt: [STATIONS[11].pos.x - 2, 2.5, STATIONS[11].pos.z], hl: ['硝酸活性化', 'クロメート'] },
+  { btn: '⑥ 乾燥・取出し', title: '場面6：乾燥・取出し → 投入へ戻る',
+    desc: '<b>温風乾燥（バレル品は遠心脱水）で水分を飛ばして完成。</b>取出し後、空いたキャリアはそのまま投入位置へ戻り、次のワークを載せます。ループ式は「戻りの無駄」がない搬送方式です。',
+    pos: [(drySt.pos.x + STATIONS[STATIONS.length - 1].pos.x) / 2 - 18, 12,
+          (drySt.pos.z + STATIONS[STATIONS.length - 1].pos.z) / 2 + 16],
+    tgt: [(drySt.pos.x + STATIONS[STATIONS.length - 1].pos.x) / 2, 3,
+          (drySt.pos.z + STATIONS[STATIONS.length - 1].pos.z) / 2], hl: ['乾燥', '取出し'] },
+  { btn: '⑦ 制御', title: '場面7：制御の仕組み（PLC）',
+    desc: '<b>「前進→一斉昇降→浸漬時間」のサイクルは、制御盤の中のPLC（シーケンサー）がプログラムで管理。</b>槽ごとの浸漬時間のレシピ通りにライン全体が自動で動き、異常時はアラームで停止します。',
+    pos: [plc.position.x + 3, 8.5, plc.position.z + 11], tgt: [plc.position.x, 2.0, plc.position.z], hl: [] },
+  { btn: '⑧ まとめ', title: '場面8：まとめ — 品質の3大ポイント',
+    desc: '<b>(1) 前処理</b>＝密着不良・ムラの予防はここが全て　<b>(2) 電流密度</b>＝膜厚と外観（やけ防止）を左右　<b>(3) 温度・液管理</b>＝ジンケート浴の亜鉛/アルカリ比と液温の管理が品質を支えます。<br>この3つを毎日の点検・分析で守ることが、フジ化学の品質保証の土台です。',
+    pos: [L / 2, 48, 70], tgt: [L / 2, 2, 0], hl: [] },
+];
+
+/* ---------- 場面切替 ---------- */
+let camFrom = null, camTo = null, camT = 1, curScene = 0;
+function gotoScene(i) {
+  const sc = SCENES[i];
+  curScene = i;
+  camFrom = { p: camera.position.clone(), t: controls.target.clone() };
+  // 縦画面（タブレット縦持ち等）では距離を伸ばして全体が収まるようにする
+  const aspect = window.innerWidth / Math.max(window.innerHeight, 1);
+  const f = Math.max(1, 1.05 / Math.max(aspect, 0.2));
+  const tgtV = new THREE.Vector3(...sc.tgt);
+  const posV = tgtV.clone().add(new THREE.Vector3(...sc.pos).sub(tgtV).multiplyScalar(f));
+  camTo = { p: posV, t: tgtV };
+  camT = 0;
+  document.getElementById('info').innerHTML = `<b>${sc.title}</b><br>${sc.desc}`;
+  document.querySelectorAll('.sbtn').forEach((b, j) => b.classList.toggle('active', j === i));
+  for (const st of highlightables) st.hl = sc.hl.includes(st.name);
+  plc.userData.hl = (i === 6);
+}
+
+const btnWrap = document.getElementById('scenebtns');
+SCENES.forEach((sc, i) => {
+  const b = document.createElement('button');
+  b.className = 'sbtn';
+  b.textContent = sc.btn;
+  b.onclick = () => gotoScene(i);
+  btnWrap.appendChild(b);
+});
+document.getElementById('playbtn').onclick = function () {
+  playing = !playing;
+  this.textContent = playing ? '⏸ 一時停止' : '▶ 再生';
+};
+document.getElementById('spdbtn').onclick = function () {
+  speed = (speed === 1) ? 2 : 1;
+  this.textContent = `速度 ${speed}x`;
+};
+
+/* ---------- メインループ ---------- */
+const clock = new THREE.Clock();
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  if (playing) updateCarriers(dt);
+
+  if (TOUR && tourArmed) { // 自動再生（録画）モード：一定間隔で場面送り＋ゆっくり周回
+    if (tourT0 < 0) tourT0 = t;
+    const el = t - tourT0;
+    const idx = Math.min(SCENES.length - 1, Math.floor(el / DWELL));
+    if (idx !== curScene) gotoScene(idx);
+    if (!tourEnded && el >= DWELL * SCENES.length) {
+      tourEnded = true; window.__tourEnded = true;
+      if (window.__onTourEnd) { try { window.__onTourEnd(); } catch (e) {} }
+    }
+  }
+
+  if (camT < 1) {
+    camT = Math.min(1, camT + dt / 1.2);
+    const e = camT < 0.5 ? 2 * camT * camT : 1 - Math.pow(-2 * camT + 2, 2) / 2;
+    camera.position.lerpVectors(camFrom.p, camTo.p, e);
+    controls.target.lerpVectors(camFrom.t, camTo.t, e);
+  } else if (TOUR) { // 場面導入のカメラ移動が終わったら、対象の周りを緩やかに周回
+    const off = camera.position.clone().sub(controls.target);
+    const a = ORBIT * dt;
+    const nx = off.x * Math.cos(a) - off.z * Math.sin(a);
+    const nz = off.x * Math.sin(a) + off.z * Math.cos(a);
+    camera.position.set(controls.target.x + nx, camera.position.y, controls.target.z + nz);
+  }
+
+  const pulse = (Math.sin(t * 4) + 1) / 2 * 0.45;
+  for (const st of highlightables) {
+    if (st.shellMat) st.shellMat.emissive.setScalar(st.hl ? pulse : 0);
+  }
+  cab.material.emissive.setScalar(plc.userData.hl ? pulse : 0);
+  led.material.color.setHex((Math.sin(t * 5) > 0) ? 0x35d435 : 0x1a6b1a);
+
+  for (const bs of bubbleSystems) {
+    const arr = bs.geo.attributes.position.array;
+    for (let i = 0; i < bs.seed.length; i++) {
+      let y = arr[i * 3 + 1] + bs.seed[i].sp * dt;
+      if (y > bs.top) y = 1 + Math.random() * 0.5;
+      arr[i * 3 + 1] = y;
+    }
+    bs.geo.attributes.position.needsUpdate = true;
+  }
+  {
+    const arr = heatGeo.attributes.position.array;
+    for (let i = 0; i < heatSeed.length; i++) {
+      let y = arr[i * 3 + 1] + heatSeed[i].sp * dt;
+      if (y > TANK_H + 7) y = TANK_H + 2.5;
+      arr[i * 3 + 1] = y;
+      arr[i * 3] = heatSeed[i].x + Math.sin(t * 2 + i) * 0.15;
+    }
+    heatGeo.attributes.position.needsUpdate = true;
+  }
+  for (const fd of flowDots) {
+    fd.t = (fd.t + dt * 0.018 * speed) % 1;
+    const p = pathPoint(fd.t);
+    fd.mesh.position.set(p.x, RAIL_Y + 1.3, p.z);
+  }
+  for (const eg of electronGroups) {
+    for (const p of eg.pts) {
+      p.t = (p.t + dt * 0.5) % 1;
+      p.mesh.position.lerpVectors(eg.from, eg.to, p.t);
+    }
+  }
+
+  if (!TOUR) controls.update(); else camera.lookAt(controls.target);
+  renderer.render(scene, camera);
+}
+
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  clearTimeout(resizeTimer); // 画面回転後に現在の場面へカメラを再フィット
+  resizeTimer = setTimeout(() => gotoScene(curScene), 350);
+});
+
+const params = new URLSearchParams(location.search);
+const TOUR = params.get('tour') === '1';
+const DWELL = 7, ORBIT = 0.13; // 1場面7秒・周回 約7.4度/秒
+let tourT0 = -1, tourEnded = false, tourArmed = false;
+window.__tourInfo = { dwell: DWELL, scenes: SCENES.length, total: DWELL * SCENES.length };
+window.__beginTour = () => { tourArmed = true; }; // 録画開始と同期させるためのゲート
+
+camera.position.set(L / 2, 55, 80);
+controls.target.set(L / 2, 2, 0);
+if (TOUR) {
+  document.getElementById('bottombar').style.display = 'none';
+  document.getElementById('playbtn').style.display = 'none';
+  document.getElementById('spdbtn').style.display = 'none';
+  const h = document.querySelector('#topbar h1');
+  if (h) h.textContent = 'フジ化学 電気亜鉛めっきライン（自動再生）';
+  controls.enabled = false;
+  playing = true; speed = 1;
+  setTimeout(() => { tourArmed = true; }, 800); // 直接ブラウザ閲覧時は自動開始
+}
+gotoScene(0);
+tick();
+</script>
+</body>
+</html>
