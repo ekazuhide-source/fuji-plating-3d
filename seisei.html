@@ -94,7 +94,8 @@ function makeLabel(text, scale = 0.5, fg = '#0e1726', bg = 'rgba(235,243,250,0.9
   sp.scale.set(cv.width / 60 * scale, cv.height / 60 * scale, 1);
   return sp;
 }
-function lblAt(text, scale, x, y, z, fg, bg) { const s = makeLabel(text, scale, fg, bg); s.position.set(x, y, z); return s; }
+const labels = [];
+function lblAt(text, scale, x, y, z, fg, bg) { const s = makeLabel(text, scale, fg, bg); s.position.set(x, y, z); labels.push(s); return s; }
 
 const GROUPS = {};
 function group(name) { const g = new THREE.Group(); GROUPS[name] = g; scene.add(g); return g; }
@@ -157,15 +158,15 @@ const eCurve = new THREE.CatmullRomCurve3([
   new THREE.Vector3(8, 16.5, 0), new THREE.Vector3(8, 10.2, 0)]);
 const electrons = [];
 for (let i = 0; i < 10; i++) {
-  const mm = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffd23d }));
+  const mm = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffd23d }));
   cell.add(mm); electrons.push({ mesh: mm, t: i / 10 });
 }
 cell.add(lblAt('電子 e⁻', 0.42, 0, 15.2, 0, '#3a2e00', 'rgba(255,210,61,0.95)'));
 
 // Zn2+ イオン
 const ions = [];
-for (let i = 0; i < 30; i++) {
-  const mm = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 10), new THREE.MeshBasicMaterial({ color: 0x6fc0ff }));
+for (let i = 0; i < 24; i++) {
+  const mm = new THREE.Mesh(new THREE.SphereGeometry(0.62, 14, 14), new THREE.MeshBasicMaterial({ color: 0x6fc0ff }));
   const y = 2 + Math.random() * 8, z = (Math.random() - 0.5) * 4;
   mm.position.set(-7 + Math.random() * 2, y, z); cell.add(mm);
   ions.push({ mesh: mm, y, z, speed: 1.2 + Math.random() * 1.4, phase: Math.random() });
@@ -306,7 +307,7 @@ let playing = true, speed = 1;
 /* ---------- ツアー ---------- */
 const params = new URLSearchParams(location.search);
 const TOUR = params.get('tour') === '1';
-const DWELL = 7, ORBIT = 0.10;
+const DWELL = 11, ORBIT = 0.07;
 let tourT0 = -1, tourEnded = false, tourArmed = false;
 window.__tourInfo = { dwell: DWELL, scenes: SCENES.length, total: DWELL * SCENES.length };
 window.__beginTour = () => { tourArmed = true; };
@@ -364,6 +365,7 @@ if (TOUR) {
   document.getElementById('playbtn').style.display = 'none';
   document.getElementById('spdbtn').style.display = 'none';
   const h = document.querySelector('#topbar h1'); if (h) h.textContent = 'フジ化学 電気亜鉛めっき 生成プロセス（自動再生）';
+  for (const l of labels) l.visible = false;        // 文字よりナレーション：動画では文字ラベルを消す
   controls.enabled = false; playing = true; speed = 1;
   setTimeout(() => { tourArmed = true; }, 800);
 }
